@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Torneo Escolar Pro</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --success: #28a745;
+            --danger: #dc3545;
+            --dark: #343a40;
+            --light: #f8f9fa;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --playing: #ff4d4d;
+            --finished: #d4edda;
+            /* Variables maestras para las líneas del fixture */
+            --bracket-gap: 40px; 
+            --bracket-half-gap: 20px;
+        }
+        
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #e9ecef;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 100%; display: grid; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+        h2 { margin-top: 0; color: var(--primary); border-bottom: 2px solid var(--light); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        
+        input, select, button { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
+        button { cursor: pointer; font-weight: bold; border: none; color: white; transition: 0.2s; }
+        
+        .import-section { background: #f1f8ff; border: 2px dashed #b1d7ff; padding: 15px; text-align: center; border-radius: 8px; }
+
+        /* --- ESTILOS DE CONFIGURACIÓN --- */
+        .duraciones-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-top: 15px; }
+        .disciplina-box { padding: 15px; border-radius: 8px; border-left: 5px solid; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .disciplina-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; }
+        .disciplina-inputs { display: flex; gap: 10px; }
+        .config-item { display: flex; flex-direction: column; flex-grow: 1; }
+        .config-item label { font-size: 13px; font-weight: bold; color: #555; margin-bottom: 6px; }
+        .config-item input { background: #fdfdfd; width: 100%; }
+        
+        .box-futsal { border-color: #007bff; background: #f0f7ff; }
+        .box-voley { border-color: #ffc107; background: #fffcf0; }
+        .box-futbol { border-color: #28a745; background: #f0fbf2; }
+
+        .estimaciones-container { background: #f4fdf8; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; margin-top: 15px; }
+        .estimaciones-container h3 { margin: 0 0 10px 0; font-size: 14px; color: var(--success); }
+        .estimaciones-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+        .est-card { background: white; border-left: 4px solid var(--info); padding: 12px; border-radius: 6px; flex-grow: 1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-width: 120px; }
+        .est-card.futsal { border-color: #007bff; }
+        .est-card.voley { border-color: #ffc107; }
+        .est-card.futbol { border-color: #28a745; }
+        .est-title { font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .est-time { font-size: 15px; font-weight: bold; color: var(--dark); margin-top: 5px; }
+
+        .tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 5px; flex-wrap: wrap; }
+        .tab-btn { padding: 8px 18px; border-radius: 20px; background: #ddd; color: var(--dark); border: none; cursor: pointer; flex-grow: 1; text-align: center; white-space: nowrap; }
+        .tab-btn.active { background: var(--primary); color: white; }
+
+        /* Estilos de Estados en la Lista */
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { background: var(--light); padding: 15px; border-left: 5px solid var(--primary); margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .partido-finalizado { background-color: var(--finished) !important; border-left-color: var(--success) !important; }
+        .partido-actual { background-color: #fff5f5 !important; border: 2px solid var(--playing) !important; } 
+        
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-right: 5px; display: inline-block;}
+        .badge-jugando { background: var(--playing); color: white; animation: blink 1s infinite; }
+        .badge-finalizado { background: var(--success); color: white; }
+        .badge-tiempo { background: var(--info); color: white; }
+        
+        .horario-badge { color: #555; font-size: 13px; display: inline-block; margin-top: 5px;}
+
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        .ganador-texto { color: var(--success); font-weight: bold; text-decoration: underline; }
+        .cronometro-mini { font-size: 32px; font-weight: bold; font-family: monospace; color: var(--playing); margin: 10px 0; }
+        .icono-disciplina { font-size: 32px; padding-left: 15px; opacity: 0.8; }
+
+        /* Tablas Responsivas */
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; min-width: 400px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: var(--primary); color: white; }
+        .fila-finalizado { background-color: var(--finished); color: #2b2b2b; }
+        .fila-actual { background-color: #fff5f5; font-weight: bold; border-left: 3px solid var(--playing); }
+
+        /* --- ESTILOS DEL ÁRBOL / FIXTURE (COORDENADAS ABSOLUTAS) --- */
+        .arbol-container {
+            display: flex; gap: 0; overflow-x: auto; overflow-y: hidden; 
+            padding: 50px 10px 50px 15px;
+            background: #fdfdfd; border-radius: 8px; min-height: 300px;
+            -webkit-overflow-scrolling: touch; align-items: stretch; position: relative;
+        }
+        
+        .arbol-ronda { 
+            flex: 1; position: relative; min-width: 180px; 
+            margin-right: var(--bracket-gap); /* Espacio exacto entre rondas */
+        }
+        .arbol-ronda:last-child {
+            margin-right: 0;
+        }
+        
+        .arbol-partido-wrapper {
+            position: absolute;
+            left: 0; right: 0;
+            transform: translateY(-50%); /* Centra matemáticamente la caja en la coordenada Top */
+            display: flex; flex-direction: column; justify-content: center;
+            box-sizing: border-box; z-index: 5;
+        }
+
+        .arbol-partido {
+            background: white; border: 2px solid #ccc; padding: 10px; border-radius: 8px; text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; margin: 0;
+        }
+
+        .arbol-partido.finalizado { border-color: var(--success); background: var(--finished); }
+        .arbol-partido.jugando { border-color: var(--playing); border-width: 3px; background: #fff5f5; animation: blink 2s infinite; }
+        
+        /* Línea horizontal de SALIDA (hacia la derecha) */
+        .arbol-partido-wrapper::after {
+            content: ''; position: absolute; right: calc(var(--bracket-half-gap) * -1); 
+            top: calc(50% - 1px); width: var(--bracket-half-gap); height: 2px; background: #bbb; z-index: 1;
+        }
+        /* La última ronda no tiene línea de salida */
+        .arbol-ronda:last-child .arbol-partido-wrapper::after {
+            display: none;
+        }
+        
+        .badge-partido {
+            position: absolute; top: -10px; left: -10px; background: var(--dark); color: white;
+            font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 12px; z-index: 3; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* --- MEDIA QUERIES --- */
+        @media (max-width: 768px) {
+            :root {
+                /* Se ajustan dinámicamente y los cálculos matemáticos siguen siendo perfectos */
+                --bracket-gap: 20px; 
+                --bracket-half-gap: 10px;
+            }
+            body { padding: 10px; }
+            .card { padding: 15px; }
+            .arbol-container { padding: 40px 5px 40px 10px; }
+            .arbol-ronda { min-width: 140px; }
+            .arbol-partido { padding: 6px 8px; font-size: 11px; } 
+            .modal-content { width: 90% !important; max-width: 350px; }
+            .disciplina-inputs { flex-wrap: wrap; }
+        }
+        @media (max-width: 480px) {
+            h2 { font-size: 1.2rem; }
+            .tab-btn { font-size: 13px; padding: 8px 10px; flex: 1 1 45%; }
+            .controles-superiores { flex-direction: column; align-items: stretch; }
+            #filtro-equipo, #btn-vista-arbol { width: 100%; min-width: 100%; }
+            li { padding: 12px 10px; }
+            .cronometro-mini { font-size: 26px; }
+            .icono-disciplina { font-size: 24px; padding-left: 10px; }
+            .info-partido { font-size: 14px !important; }
+            .acciones-partido { flex-wrap: wrap; width: 100%; }
+            .acciones-partido button { flex-grow: 1; font-size: 13px; padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div class="card">
+            <h2>📝 Importación de Partidos</h2>
+            <div class="import-section">
+                <input type="file" id="input-excel" accept=".xlsx, .xls" style="width: 100%; margin-bottom: 10px;">
+                <p style="font-size: 12px; color: #666; margin: 0;">Excel requerido: <b>equipo1, equipo2, Estado, Ganador, Hora Inicio</b>.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ Configuración y Tiempos</h2>
+            
+            <div class="duraciones-group">
+                <div class="disciplina-box box-futsal">
+                    <div class="disciplina-title" style="color: #007bff;">⚽ Futsal</div>
+                    <div class="disciplina-inputs">
+                        <div class="config-item">
+                            <label>Inicio:</label>
+                            <input type="time" id="inicio-futsal" value="08:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item">
+                            <label>Fin:</label>
+                            <input type="time" id="fin-futsal" value="18:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item" style="max-width: 80px;">
+                            <label>Min:</label>
+                            <input type="number" id="duracion-futsal" value="40" min="5" onchange="recalcular()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="disciplina-box box-voley">
+                    <div class="disciplina-title" style="color: #d39e00;">🏐 Vóley</div>
+                    <div class="disciplina-inputs">
+                        <div class="config-item">
+                            <label>Inicio:</label>
+                            <input type="time" id="inicio-voley" value="08:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item">
+                            <label>Fin:</label>
+                            <input type="time" id="fin-voley" value="18:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item" style="max-width: 80px;">
+                            <label>Min:</label>
+                            <input type="number" id="duracion-voley" value="45" min="5" onchange="recalcular()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="disciplina-box box-futbol">
+                    <div class="disciplina-title" style="color: #28a745;">🏟️ Fútbol</div>
+                    <div class="disciplina-inputs">
+                        <div class="config-item">
+                            <label>Inicio:</label>
+                            <input type="time" id="inicio-futbol" value="08:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item">
+                            <label>Fin:</label>
+                            <input type="time" id="fin-futbol" value="16:00" onchange="recalcular()">
+                        </div>
+                        <div class="config-item" style="max-width: 80px;">
+                            <label>Min:</label>
+                            <input type="number" id="duracion-futbol" value="50" min="5" onchange="recalcular()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="estimaciones-container" class="estimaciones-container" style="display: none;">
+                <h3>⏱️ Finalización Estimada por Disciplina</h3>
+                <div class="estimaciones-grid" id="estimaciones-grid"></div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-Todos" onclick="cambiarTab('Todos')">🌍 Todos</button>
+            <button class="tab-btn" id="tab-Futsal" onclick="cambiarTab('Futsal')">⚽ Futsal</button>
+            <button class="tab-btn" id="tab-Voley" onclick="cambiarTab('Voley')">🏐 Voley</button>
+            <button class="tab-btn" id="tab-Futbol" onclick="cambiarTab('Futbol')">🏟️ Fútbol</button>
+        </div>
+
+        <div class="card">
+            <h2>📋 Programación de Partidos</h2>
+            <div class="controles-superiores" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <input type="search" id="filtro-equipo" placeholder="🔍 Buscar equipo..." oninput="verMasActivado = false; actualizarUI()" style="flex-grow: 1; min-width: 200px;">
+                <button id="btn-vista-arbol" onclick="toggleVistaArbol()" style="background: var(--info); white-space: nowrap;">🌳 Ver Fixture</button>
+            </div>
+            
+            <ul id="lista-programacion"></ul>
+            <div id="contenedor-arbol" class="arbol-container" style="display: none;"></div>
+        </div>
+
+        <div class="card">
+            <h2>🏆 Tablas de Resultados</h2>
+            <div id="tablas-resultados">
+                <div id="res-Futsal">
+                    <h3>⚽ Futsal</h3>
+                    <div class="table-responsive"><table id="tbl-futsal"><thead><tr><th>E1</th><th>E2</th><th>Estado</th><th>Ganador</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div id="res-Voley">
+                    <h3>🏐 Voley</h3>
+                    <div class="table-responsive"><table id="tbl-voley"><thead><tr><th>E1</th><th>E2</th><th>Estado</th><th>Ganador</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div id="res-Futbol">
+                    <h3>🏟️ Fútbol</h3>
+                    <div class="table-responsive"><table id="tbl-futbol"><thead><tr><th>E1</th><th>E2</th><th>Estado</th><th>Ganador</th></tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ganador" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:2000;">
+        <div class="modal-content" style="background:white; padding:30px; border-radius:10px; text-align:center; width:350px;">
+            <h3>Elegir Ganador</h3>
+            <input type="password" id="input-clave" placeholder="Clave" style="width:100%; margin-bottom:10px; box-sizing: border-box;">
+            <button id="btn-g1" onclick="finalizarManual(1)" style="background:var(--success); width:100%; margin-bottom:5px;"></button>
+            <button id="btn-g2" onclick="finalizarManual(2)" style="background:var(--success); width:100%; margin-bottom:5px;"></button>
+            <button onclick="finalizarManual(0)" style="background:var(--warning); color:black; width:100%; margin-bottom:10px;">🤝 Empate</button>
+            <button onclick="document.getElementById('modal-ganador').style.display='none'" style="background:#666; width:100%;">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const CLAVE = "colegio2026";
+        let partidos = []; 
+        let disciplinaActiva = 'Todos';
+        let tiempoSegundos = 0;
+        let intervalo = null;
+        let verMasActivado = false; 
+        let vistaArbolActivada = false;
+
+        function obtenerIcono(d) { return { Futsal: '⚽', Voley: '🏐', Futbol: '🏟️' }[d] || '🏅'; }
+
+        // --- EXCEL ---
+        document.getElementById('input-excel').addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const wb = XLSX.read(evt.target.result, { type: 'binary' });
+                partidos = [];
+                wb.SheetNames.forEach(name => {
+                    let d = name.trim();
+                    if(d.toLowerCase().includes('futsal')) d = 'Futsal';
+                    else if(d.toLowerCase().includes('voley')) d = 'Voley';
+                    else if(d.toLowerCase().includes('futbol')) d = 'Futbol';
+                    else return;
+                    
+                    const data = XLSX.utils.sheet_to_json(wb.Sheets[name]);
+                    data.forEach(f => {
+                        let estadoPartido = String(f.Estado || f.Tiempo || 'Pendiente');
+                        partidos.push({
+                            id: Math.random(),
+                            disciplina: d,
+                            equipo1: String(f.equipo1),
+                            equipo2: String(f.equipo2),
+                            tiempo: estadoPartido,
+                            ganador: String(f.Ganador || ''),
+                            rawHora: f['Hora Inicio'] || f.HoraInicio || ''
+                        });
+                    });
+                });
+                
+                recalcular();
+            };
+            if(e.target.files[0]) reader.readAsBinaryString(e.target.files[0]);
+        });
+
+        function recalcular() {
+            if (partidos.length === 0) return;
+            calcularHorariosGlobales();
+            actualizarUI();
+        }
+
+        // --- LÓGICA DE HORARIOS ---
+        function calcularHorariosGlobales() {
+            const configDict = {
+                'Futsal': {
+                    ini: document.getElementById('inicio-futsal').value || '08:00',
+                    fin: document.getElementById('fin-futsal').value || '18:00',
+                    dur: parseInt(document.getElementById('duracion-futsal').value) || 40
+                },
+                'Voley': {
+                    ini: document.getElementById('inicio-voley').value || '08:00',
+                    fin: document.getElementById('fin-voley').value || '18:00',
+                    dur: parseInt(document.getElementById('duracion-voley').value) || 45
+                },
+                'Futbol': {
+                    ini: document.getElementById('inicio-futbol').value || '08:00',
+                    fin: document.getElementById('fin-futbol').value || '16:00',
+                    dur: parseInt(document.getElementById('duracion-futbol').value) || 50
+                }
+            };
+
+            let relojesDisciplina = {};
+            let estimaciones = {};
+
+            partidos.forEach(p => {
+                let conf = configDict[p.disciplina];
+                if (!conf) return; 
+
+                let [hIni, mIni] = conf.ini.split(':').map(Number);
+                let [hFin, mFin] = conf.fin.split(':').map(Number);
+                let duracionActual = conf.dur;
+
+                if (!relojesDisciplina[p.disciplina]) {
+                    relojesDisciplina[p.disciplina] = new Date();
+                    relojesDisciplina[p.disciplina].setHours(hIni, mIni, 0, 0);
+                }
+                let current_reloj = relojesDisciplina[p.disciplina];
+
+                if (p.rawHora) {
+                    let dateMatch = String(p.rawHora).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+                    let checkDate = new Date(current_reloj);
+                    
+                    if (dateMatch) {
+                        checkDate = new Date(dateMatch[3], dateMatch[2] - 1, dateMatch[1], dateMatch[4], dateMatch[5], 0, 0);
+                    } else {
+                        let timeMatch = String(p.rawHora).match(/\d{1,2}:\d{2}/);
+                        if (timeMatch) {
+                            let [hh, mm] = timeMatch[0].split(':').map(Number);
+                            checkDate.setHours(hh, mm, 0, 0);
+                        }
+                    }
+                    if (checkDate > current_reloj) current_reloj.setTime(checkDate.getTime());
+                }
+
+                let limiteFinDia = new Date(current_reloj);
+                limiteFinDia.setHours(hFin, mFin, 0, 0);
+                
+                let proximoFinEstimado = new Date(current_reloj.getTime() + (duracionActual * 60000));
+
+                if (proximoFinEstimado > limiteFinDia) {
+                    current_reloj.setDate(current_reloj.getDate() + 1);
+                    current_reloj.setHours(hIni, mIni, 0, 0); 
+                }
+
+                let formatoDiaIni = current_reloj.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace(',', '');
+                let formatoHoraIni = current_reloj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                p.ini = `${formatoDiaIni} ${formatoHoraIni}`;
+                
+                current_reloj.setMinutes(current_reloj.getMinutes() + duracionActual);
+                
+                let formatoDiaFin = current_reloj.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace(',', '');
+                p.fin = current_reloj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                estimaciones[p.disciplina] = `${formatoDiaFin} a las ${p.fin}`;
+            });
+
+            mostrarEstimaciones(estimaciones);
+        }
+
+        function mostrarEstimaciones(estimaciones) {
+            const container = document.getElementById('estimaciones-container');
+            const grid = document.getElementById('estimaciones-grid');
+            
+            if (Object.keys(estimaciones).length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            grid.innerHTML = '';
+
+            for (const [disc, tiempo] of Object.entries(estimaciones)) {
+                const cssClase = disc.toLowerCase(); 
+                grid.innerHTML += `
+                    <div class="est-card ${cssClase}">
+                        <div class="est-title">${obtenerIcono(disc)} ${disc}</div>
+                        <div class="est-time">🏁 Fin: ${tiempo}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function cambiarTab(d) {
+            disciplinaActiva = d;
+            verMasActivado = false; 
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === `tab-${d}`));
+            actualizarUI();
+        }
+
+        function toggleVistaArbol() {
+            vistaArbolActivada = !vistaArbolActivada;
+            const btn = document.getElementById('btn-vista-arbol');
+            btn.innerHTML = vistaArbolActivada ? '📄 Ver Lista' : '🌳 Ver Fixture';
+            btn.style.background = vistaArbolActivada ? 'var(--primary)' : 'var(--info)';
+            actualizarUI();
+        }
+
+        // --- ALGORITMO DEL ÁRBOL DINÁMICO (COORDENADAS ABSOLUTAS Y-AXIS) ---
+        function generarFixtureProyectado(partidosIniciales) {
+            let contadorPartidos = 0;
+            
+            // Paso 1: Establecer la coordenada Y inicial. Cada partido en la ronda 0 tiene y=0, y=1, y=2...
+            let rondaActual = partidosIniciales.map((p, index) => {
+                contadorPartidos++;
+                return { ...p, numPartido: contadorPartidos, yTop: index, yBottom: index, yCenter: index };
+            });
+
+            let rondas = [rondaActual];
+
+            while (rondaActual.length > 1) {
+                let siguienteRonda = [];
+                for (let i = 0; i < rondaActual.length; i += 2) {
+                    let p1 = rondaActual[i];
+                    let p2 = rondaActual[i + 1]; 
+                    
+                    contadorPartidos++; 
+                    let equipo1Sig = (p1 && p1.ganador && p1.ganador !== 'Empate') ? p1.ganador : (p1 ? `Ganador P${p1.numPartido}` : '-');
+                    let equipo2Sig = (p2 && p2.ganador && p2.ganador !== 'Empate') ? p2.ganador : (p2 ? `Ganador P${p2.numPartido}` : '-');
+
+                    // Paso 2: Calcular nueva coordenada Y. El nuevo partido se ubica EXACTAMENTE en la mitad de los dos anteriores.
+                    let yTop = p1.yCenter;
+                    let yBottom = p2 ? p2.yCenter : p1.yCenter;
+                    let yCenter = (yTop + yBottom) / 2;
+
+                    siguienteRonda.push({
+                        esProyectado: true,
+                        numPartido: contadorPartidos,
+                        equipo1: equipo1Sig,
+                        equipo2: equipo2Sig,
+                        ganador: '',
+                        tiempo: 'Pendiente',
+                        yTop: yTop,
+                        yBottom: yBottom,
+                        yCenter: yCenter,
+                        has2Parents: !!p2
+                    });
+                }
+                rondas.push(siguienteRonda);
+                rondaActual = siguienteRonda;
+            }
+            return rondas;
+        }
+
+        function renderizarArbol(listaRender) {
+            const contenedorArbol = document.getElementById('contenedor-arbol');
+            
+            if (disciplinaActiva === 'Todos') {
+                contenedorArbol.innerHTML = '<div style="width:100%; text-align:center; padding:30px; color:#666; font-size:18px;"><b>🌳 Selecciona una disciplina (⚽ Futsal, 🏐 Voley o 🏟️ Fútbol)</b> arriba para poder proyectar su Fixture.</div>';
+                return;
+            }
+            if (listaRender.length === 0) {
+                contenedorArbol.innerHTML = '<div style="width:100%; text-align:center; padding:30px; color:#666;">No hay partidos programados para dibujar el árbol.</div>';
+                return;
+            }
+
+            const rondas = generarFixtureProyectado(listaRender);
+            let N = listaRender.length || 1;
+            
+            // Garantizamos que el contenedor sea lo suficientemente alto para desplegar todas las coordenadas
+            contenedorArbol.style.minHeight = `${N * 110 + 60}px`;
+
+            let htmlArbol = '';
+
+            rondas.forEach((ronda, index) => {
+                let nombreRonda = '';
+                if (index === rondas.length - 1) nombreRonda = '🏆 FINAL';
+                else if (index === rondas.length - 2 && rondas.length > 2) nombreRonda = 'SEMIFINAL';
+                else nombreRonda = `RONDA ${index + 1}`;
+
+                htmlArbol += `<div class="arbol-ronda">`;
+                htmlArbol += `<div style="position:absolute; top:-35px; width:100%; text-align:center; font-weight:bold; color:var(--primary); font-size:11px;">${nombreRonda}</div>`;
+                
+                ronda.forEach(p => {
+                    
+                    // --- DIBUJAR LÍNEAS DE ENTRADA (CONECTORES) ---
+                    if (index > 0) {
+                        if (p.has2Parents) {
+                            // Línea Vertical | (El Codo). Se dibuja matemáticamente entre los centros de sus 2 padres
+                            htmlArbol += `
+                            <div style="position: absolute; left: calc(var(--bracket-half-gap) * -1); 
+                                        top: calc(${((p.yTop + 0.5) / N) * 100}% - 1px); 
+                                        height: calc(${((p.yBottom - p.yTop) / N) * 100}% + 2px); 
+                                        width: 2px; background: #bbb;">
+                            </div>`;
+                        }
+                        // Línea Horizontal de entrada (-) hacia el partido actual
+                        htmlArbol += `
+                        <div style="position: absolute; left: calc(var(--bracket-half-gap) * -1); 
+                                    top: calc(${((p.yCenter + 0.5) / N) * 100}% - 1px); 
+                                    width: var(--bracket-half-gap); height: 2px; background: #bbb;">
+                        </div>`;
+                    }
+
+                    // --- DIBUJAR LA CAJA DEL PARTIDO ---
+                    let claseExtra = '';
+                    let contenidoHora = '';
+                    
+                    if (!p.esProyectado) {
+                        claseExtra = p.tiempo === 'Finalizado' ? 'finalizado' : ((p.tiempo === 'Actual' || p.tiempo === '1 Tiempo' || p.tiempo === '2 Tiempo') ? 'jugando' : '');
+                        contenidoHora = `<div style="font-size:10px; color:#666; margin-bottom:5px;">🕒 ${p.ini ? p.ini.split(' ')[2] || p.ini : ''}</div>`;
+                    } else {
+                        claseExtra = 'proyectado';
+                    }
+
+                    let cssEq1 = p.equipo1.includes('Ganador') || p.equipo1 === '-' ? 'color: #999; font-style: italic;' : 'font-weight: bold;';
+                    let cssEq2 = p.equipo2.includes('Ganador') || p.equipo2 === '-' ? 'color: #999; font-style: italic;' : 'font-weight: bold;';
+                    const textoEq2 = p.equipo2 === '-' ? '(Pasa directo)' : p.equipo2;
+
+                    if (p.ganador && p.ganador !== 'Empate') {
+                        if (p.ganador === p.equipo1) {
+                            cssEq1 = 'font-weight: bold; color: var(--success);';
+                            if (p.equipo2 !== '-') cssEq2 = 'font-weight: bold; color: var(--danger);';
+                        } else if (p.ganador === p.equipo2) {
+                            cssEq2 = 'font-weight: bold; color: var(--success);';
+                            cssEq1 = 'font-weight: bold; color: var(--danger);';
+                        }
+                    }
+
+                    // La caja se alinea usando YCenter garantizando precisión total
+                    htmlArbol += `
+                        <div class="arbol-partido-wrapper" style="top: calc(${((p.yCenter + 0.5) / N) * 100}%);">
+                            <div class="arbol-partido ${claseExtra}">
+                                <div class="badge-partido">P${p.numPartido}</div>
+                                ${contenidoHora}
+                                <div style="font-size:13px; margin-bottom: 2px; ${cssEq1}">${p.equipo1}</div>
+                                <div style="font-size:10px; color:#999; margin:3px 0;">vs</div>
+                                <div style="font-size:13px; margin-top: 2px; ${cssEq2}">${textoEq2}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                htmlArbol += `</div>`;
+            });
+
+            contenedorArbol.innerHTML = htmlArbol;
+        }
+
+        function actualizarUI() {
+            const lista = document.getElementById('lista-programacion');
+            const contenedorArbol = document.getElementById('contenedor-arbol');
+            const filtro = document.getElementById('filtro-equipo').value.toLowerCase();
+            
+            ['futsal', 'voley', 'futbol'].forEach(id => {
+                const tbody = document.querySelector(`#tbl-${id} tbody`);
+                if(tbody) tbody.innerHTML = '';
+            });
+
+            let listaRender = [];
+
+            partidos.forEach((p) => {
+                const esActual = p.tiempo === '1 Tiempo' || p.tiempo === '2 Tiempo' || p.tiempo === 'Actual';
+                
+                if (p.tiempo === 'Finalizado' || esActual) {
+                    let claseTr = p.tiempo === 'Finalizado' ? 'class="fila-finalizado"' : 'class="fila-actual"';
+                    let textoEstado = p.tiempo === 'Finalizado' ? p.tiempo : `<span class="badge badge-jugando">ACTUAL</span> <br> ${p.tiempo}`;
+                    const row = `<tr ${claseTr}><td>${p.equipo1}</td><td>${p.equipo2}</td><td>${textoEstado}</td><td>${p.ganador || '-'}</td></tr>`;
+                    const tbody = document.querySelector(`#tbl-${p.disciplina.toLowerCase()} tbody`);
+                    if(tbody) tbody.innerHTML += row;
+                }
+
+                const matchF = p.equipo1.toLowerCase().includes(filtro) || p.equipo2.toLowerCase().includes(filtro);
+                const matchT = (disciplinaActiva === 'Todos' || p.disciplina === disciplinaActiva);
+                if (matchF && matchT) listaRender.push(p);
+            });
+
+            if (vistaArbolActivada) {
+                lista.style.display = 'none';
+                contenedorArbol.style.display = 'flex';
+                renderizarArbol(listaRender);
+                return; 
+            } else {
+                lista.style.display = 'block';
+                contenedorArbol.style.display = 'none';
+                lista.innerHTML = ''; 
+            }
+
+            let indexArranque = listaRender.findIndex(p => p.tiempo === 'Actual' || p.tiempo === '1 Tiempo' || p.tiempo === '2 Tiempo');
+            if (indexArranque === -1) indexArranque = listaRender.findIndex(p => p.tiempo === 'Pendiente' || p.tiempo === '');
+            if (indexArranque === -1) indexArranque = 0;
+
+            let listaRecortada = listaRender.slice(indexArranque);
+            let mostrarBotonVerMas = false;
+
+            if (!verMasActivado && listaRecortada.length > 5) {
+                listaRecortada = listaRecortada.slice(0, 5);
+                mostrarBotonVerMas = true;
+            }
+
+            listaRecortada.forEach(p => {
+                const li = document.createElement('li');
+                const bloqueIcono = `<div class="icono-disciplina" title="${p.disciplina}">${obtenerIcono(p.disciplina)}</div>`;
+                
+                if (p.tiempo === 'Finalizado') {
+                    li.className = 'partido-finalizado';
+                    const e1Class = p.ganador === p.equipo1 ? 'ganador-texto' : '';
+                    const e2Class = p.ganador === p.equipo2 ? 'ganador-texto' : '';
+                    li.innerHTML = `
+                        <div style="flex-grow: 1;">
+                            <span class="badge badge-finalizado">Finalizado</span><br>
+                            <span class="horario-badge">🗓️ ${p.ini}</span>
+                            <div class="info-partido" style="font-size:16px; margin-top:5px;"><span class="${e1Class}">${p.equipo1}</span> vs <span class="${e2Class}">${p.equipo2}</span></div>
+                        </div>${bloqueIcono}`;
+                } else if (p.tiempo === 'Actual' || p.tiempo === '1 Tiempo' || p.tiempo === '2 Tiempo') {
+                    li.className = 'partido-actual';
+                    li.innerHTML = `
+                        <div style="display:flex; flex-direction:column; align-items:flex-start; flex-grow:1; width: 100%;">
+                            <span class="badge badge-jugando">JUGANDO - ${p.tiempo.toUpperCase()}</span>
+                            <div class="info-partido" style="font-size:18px; font-weight:bold; color:var(--playing); margin-top: 5px;">${p.equipo1} vs ${p.equipo2}</div>
+                            <div class="cronometro-mini">${fTime(tiempoSegundos)}</div>
+                            <div class="acciones-partido" style="display:flex; gap: 5px;">
+                                <button onclick="toggleTimer()" style="background:var(--dark); padding:5px 15px;">▶/⏸</button>
+                                <button onclick="abrirModalFinalizar('${p.id}')" style="background:var(--playing); padding:5px 15px;">TERMINAR</button>
+                            </div>
+                        </div>${bloqueIcono}`;
+                } else {
+                    const tBadge = (p.tiempo !== 'Pendiente' && p.tiempo !== '') ? `<span class="badge badge-tiempo">${p.tiempo}</span>` : '';
+                    li.innerHTML = `
+                        <div style="flex-grow: 1;">
+                            ${tBadge} <span class="horario-badge">🗓️ ${p.ini} - 🕒 ${p.fin}</span>
+                            <div class="info-partido" style="font-size:16px; margin-top:5px;"><b>${p.equipo1} vs ${p.equipo2}</b></div>
+                        </div>${bloqueIcono}`;
+                }
+                lista.appendChild(li);
+            });
+
+            if (mostrarBotonVerMas) {
+                const btnVerMas = document.createElement('button');
+                btnVerMas.innerHTML = "Ver más partidos 👇";
+                btnVerMas.style.cssText = "width: 100%; padding: 12px; margin-top: 5px; background: var(--primary); color: white; border-radius: 5px;";
+                btnVerMas.onclick = () => { verMasActivado = true; actualizarUI(); };
+                lista.appendChild(btnVerMas);
+            } else if (verMasActivado && listaRender.slice(indexArranque).length > 5) {
+                const btnVerMenos = document.createElement('button');
+                btnVerMenos.innerHTML = "Ver menos ☝️";
+                btnVerMenos.style.cssText = "width: 100%; padding: 12px; margin-top: 5px; background: var(--dark); color: white; border-radius: 5px;";
+                btnVerMenos.onclick = () => { verMasActivado = false; actualizarUI(); };
+                lista.appendChild(btnVerMenos);
+            }
+        }
+
+        function toggleTimer() {
+            if (intervalo) { clearInterval(intervalo); intervalo = null; }
+            else { intervalo = setInterval(() => { tiempoSegundos++; actualizarUI(); }, 1000); }
+        }
+
+        let idParaFinalizar = null;
+        function abrirModalFinalizar(id) {
+            idParaFinalizar = id;
+            const p = partidos.find(p => p.id == id);
+            document.getElementById('btn-g1').textContent = "Ganó " + p.equipo1;
+            document.getElementById('btn-g2').textContent = "Ganó " + p.equipo2;
+            document.getElementById('modal-ganador').style.display = 'flex';
+        }
+
+        function finalizarManual(op) {
+            if (document.getElementById('input-clave').value !== CLAVE) return alert("Error clave");
+            const idx = partidos.findIndex(p => p.id == idParaFinalizar);
+            const p = partidos[idx];
+            p.tiempo = 'Finalizado';
+            p.ganador = op === 1 ? p.equipo1 : (op === 2 ? p.equipo2 : 'Empate');
+            clearInterval(intervalo); intervalo = null;
+            document.getElementById('modal-ganador').style.display = 'none';
+            document.getElementById('input-clave').value = ''; 
+            actualizarUI();
+        }
+
+        function fTime(s) { return `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`; }
+    </script>
+</body>
+</html>
